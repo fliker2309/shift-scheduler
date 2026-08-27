@@ -32,16 +32,39 @@ class ShiftRepositoryImpl(
             }
         }
 
+    override fun getAllPatterns(): Flow<List<ShiftPattern>> =
+        shiftDao.getAllPatterns().map { entities ->
+            entities.map { entity ->
+                ShiftPattern(
+                    id = entity.id,
+                    name = entity.name,
+                    items = json.decodeFromString(entity.patternJson),
+                    startDateEpochDay = entity.startDateEpochDay
+                )
+            }
+        }
+
     override suspend fun savePattern(pattern: ShiftPattern) {
-        shiftDao.insertPattern(
-            ShiftPatternEntity(
-                id = pattern.id,
-                name = pattern.name,
-                patternJson = json.encodeToString(pattern.items),
-                startDateEpochDay = pattern.startDateEpochDay,
-                isActive = true
-            )
+        val entity = ShiftPatternEntity(
+            id = pattern.id,
+            name = pattern.name,
+            patternJson = json.encodeToString(pattern.items),
+            startDateEpochDay = pattern.startDateEpochDay,
+            isActive = true
         )
+        if (entity.isActive) {
+            shiftDao.setActivePattern(shiftDao.insertPatternWithReturnId(entity))
+        } else {
+            shiftDao.insertPattern(entity)
+        }
+    }
+
+    override suspend fun setActivePattern(patternId: Long) {
+        shiftDao.setActivePattern(patternId)
+    }
+
+    override suspend fun deletePattern(patternId: Long) {
+        shiftDao.deletePattern(patternId)
     }
 
     override fun getCustomOverrides(from: LocalDate, to: LocalDate): Flow<List<WorkDay>> {

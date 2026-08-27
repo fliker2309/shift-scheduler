@@ -3,12 +3,9 @@ package com.fliker.shiftscheduler.ui.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
@@ -28,7 +25,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PatternSettingsScreen(
     state: PatternSettingsUiState,
@@ -41,143 +38,162 @@ fun PatternSettingsScreen(
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.pattern_settings_title),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 24.dp)
-        )
-
-        OutlinedTextField(
-            value = state.name,
-            onValueChange = onNameChange,
-            label = { Text(stringResource(R.string.pattern_name_label)) },
-            placeholder = { Text(stringResource(R.string.pattern_name_placeholder)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = state.startDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
-            onValueChange = {},
-            label = { Text(stringResource(R.string.start_date_label)) },
-            readOnly = true,
-            trailingIcon = {
-                IconButton(onClick = { showDatePicker = true }) {
-                    Icon(Icons.Default.DateRange, contentDescription = "Select Date")
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = stringResource(R.string.pattern_settings_title),
+                        fontWeight = FontWeight.Bold
+                    )
                 }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { showDatePicker = true }
-        )
-
-        if (showDatePicker) {
-            val datePickerState = rememberDatePickerState(
-                initialSelectedDateMillis = state.startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
             )
-            DatePickerDialog(
-                onDismissRequest = { showDatePicker = false },
-                confirmButton = {
-                    TextButton(onClick = {
-                        datePickerState.selectedDateMillis?.let {
-                            val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
-                            onStartDateChange(date)
-                        }
-                        showDatePicker = false
-                    }) {
-                        Text("OK")
-                    }
-                }
-            ) {
-                DatePicker(state = datePickerState)
-            }
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = stringResource(R.string.add_shift_label),
-            style = MaterialTheme.typography.titleMedium
-        )
-
-        Row(
+    ) { innerPadding ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
         ) {
-            state.availableTypes.forEach { type ->
-                InputChip(
-                    selected = false,
-                    onClick = { onAddShift(type) },
-                    label = { Text(type.name) },
-                    leadingIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .background(
-                                    color = if (type is ShiftType.Work) Color(android.graphics.Color.parseColor(type.colorHex)) else Color.Gray,
-                                    shape = CircleShape
-                                )
-                        )
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = onNameChange,
+                label = { Text(stringResource(R.string.pattern_name_label)) },
+                placeholder = { Text(stringResource(R.string.pattern_name_placeholder)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = state.startDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
+                onValueChange = {},
+                label = { Text(stringResource(R.string.start_date_label)) },
+                readOnly = true,
+                trailingIcon = {
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(Icons.Default.DateRange, contentDescription = "Select Date")
                     }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = stringResource(R.string.current_pattern_label),
-            style = MaterialTheme.typography.titleMedium
-        )
-
-        if (state.items.isEmpty()) {
-            Box(
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(100.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(R.string.empty_pattern_hint),
-                    color = Color.Gray,
-                    fontSize = 14.sp
+                    .clickable { showDatePicker = true }
+            )
+
+            if (showDatePicker) {
+                val datePickerState = rememberDatePickerState(
+                    initialSelectedDateMillis = state.startDate.atStartOfDay(ZoneId.systemDefault())
+                        .toInstant().toEpochMilli()
                 )
+                DatePickerDialog(
+                    onDismissRequest = { showDatePicker = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            datePickerState.selectedDateMillis?.let {
+                                val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault())
+                                    .toLocalDate()
+                                onStartDateChange(date)
+                            }
+                            showDatePicker = false
+                        }) {
+                            Text("OK")
+                        }
+                    }
+                ) {
+                    DatePicker(state = datePickerState)
+                }
             }
-        } else {
-            LazyRow(
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = stringResource(R.string.add_shift_label),
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                itemsIndexed(state.items) { index, type ->
-                    ShiftItem(
-                        type = type,
-                        onRemove = { onRemoveShift(index) }
+                state.availableTypes.forEach { type ->
+                    InputChip(
+                        selected = false,
+                        onClick = { onAddShift(type) },
+                        label = { Text(type.name) },
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .background(
+                                        color = when (type) {
+                                            is ShiftType.Work -> Color(android.graphics.Color.parseColor(type.colorHex))
+                                            is ShiftType.Off -> Color.Gray
+                                            is ShiftType.Vacation -> Color(0xFF4CAF50)
+                                            is ShiftType.SickLeave -> Color(0xFFF44336)
+                                        },
+                                        shape = CircleShape
+                                    )
+                            )
+                        }
                     )
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
-        Button(
-            onClick = onSave,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = state.name.isNotBlank() && state.items.isNotEmpty(),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Text(stringResource(R.string.save_button))
+            Text(
+                text = stringResource(R.string.current_pattern_label),
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            if (state.items.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.empty_pattern_hint),
+                        color = Color.Gray,
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    state.items.forEachIndexed { index, type ->
+                        ShiftItem(
+                            type = type,
+                            onRemove = { onRemoveShift(index) }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Button(
+                onClick = onSave,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                enabled = state.name.isNotBlank() && state.items.isNotEmpty(),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(stringResource(R.string.save_button))
+            }
         }
     }
 }
@@ -189,32 +205,41 @@ fun ShiftItem(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.width(100.dp)
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.width(IntrinsicSize.Min)
     ) {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(8.dp)
                     .background(
-                        color = if (type is ShiftType.Work) Color(android.graphics.Color.parseColor(type.colorHex)) else Color.Gray,
+                        color = when (type) {
+                            is ShiftType.Work -> Color(android.graphics.Color.parseColor(type.colorHex))
+                            is ShiftType.Off -> Color.Gray
+                            is ShiftType.Vacation -> Color(0xFF4CAF50)
+                            is ShiftType.SickLeave -> Color(0xFFF44336)
+                        },
                         shape = CircleShape
                     )
             )
             Text(
                 text = type.name,
                 style = MaterialTheme.typography.labelMedium,
-                maxLines = 1,
-                modifier = Modifier.padding(top = 4.dp)
+                maxLines = 1
             )
-            IconButton(onClick = onRemove, modifier = Modifier.size(24.dp)) {
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(16.dp)
+            ) {
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "Remove",
-                    tint = MaterialTheme.colorScheme.error
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(12.dp)
                 )
             }
         }

@@ -11,6 +11,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.room.Room
 import com.fliker.shiftscheduler.data.local.AppDatabase
+import com.fliker.shiftscheduler.data.local.UserPreferencesRepository
 import com.fliker.shiftscheduler.data.repository.ShiftRepositoryImpl
 import com.fliker.shiftscheduler.ui.navigation.AppNavigation
 import com.fliker.shiftscheduler.ui.theme.ShiftSchedulerTheme
@@ -24,17 +25,14 @@ class MainActivity : ComponentActivity() {
             AppDatabase::class.java, "shifts-db"
         ).build()
         val repository = ShiftRepositoryImpl(db.shiftDao())
+        val userPreferencesRepository = UserPreferencesRepository(applicationContext)
         
         enableEdgeToEdge()
         setContent {
-            ShiftSchedulerTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    AppNavigation(repository = repository)
-                }
-            }
+            AppNavigation(
+                repository = repository,
+                userPreferencesRepository = userPreferencesRepository
+            )
         }
     }
 }

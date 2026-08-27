@@ -16,4 +16,15 @@
     <string name="stats_night_shifts">Ночных смен: %d</string>
     <string name="override_dialog_title">Изменить смену</string>
     <string name="override_clear">Сбросить</string>
+    <string name="delete_pattern_dialog_title">Удалить график?</string>
+    <string name="delete_pattern_dialog_message">Вы уверены, что хотите удалить график «%s»? Это действие нельзя отменить.</string>
+    <string name="delete_button">Удалить</string>
+    <string name="cancel_button">Отмена</string>
+    <string name="settings_ui_title">Настройки интерфейса</string>
+    <string name="theme_setting_label">Тема приложения</string>
+    <string name="theme_system">Системная</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="dim_weekends_label">Приглушать выходные дни</string>
+    <string name="show_week_numbers_label">Показывать номера недель</string>
 </resources>

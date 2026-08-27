@@ -7,7 +7,10 @@ import java.time.LocalDate
 
 interface ShiftRepository {
     fun getActivePattern(): Flow<ShiftPattern?>
+    fun getAllPatterns(): Flow<List<ShiftPattern>>
     suspend fun savePattern(pattern: ShiftPattern)
+    suspend fun setActivePattern(patternId: Long)
+    suspend fun deletePattern(patternId: Long)
 
     fun getCustomOverrides(from: LocalDate, to: LocalDate): Flow<List<WorkDay>>
     suspend fun saveCustomOverride(workDay: WorkDay)

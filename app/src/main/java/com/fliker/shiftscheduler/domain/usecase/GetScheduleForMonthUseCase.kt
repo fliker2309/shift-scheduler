@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
 
 class GetScheduleForMonthUseCase(
-    private val repository: ShiftRepository
+    val repository: ShiftRepository
 ) {
     operator fun invoke(from: LocalDate, to: LocalDate): Flow<List<WorkDay>> {
         return combine(

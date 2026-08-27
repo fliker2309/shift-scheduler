@@ -5,11 +5,15 @@ import androidx.lifecycle.viewModelScope
 import com.fliker.shiftscheduler.domain.model.ShiftType
 import com.fliker.shiftscheduler.domain.model.WorkDay
 import com.fliker.shiftscheduler.domain.usecase.GetScheduleForMonthUseCase
+import com.fliker.shiftscheduler.domain.usecase.GetShiftPatternsUseCase
+import com.fliker.shiftscheduler.domain.usecase.SelectActivePatternUseCase
+import com.fliker.shiftscheduler.domain.usecase.DeleteShiftPatternUseCase
 import com.fliker.shiftscheduler.domain.usecase.SetOverrideDayUseCase
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -20,7 +24,10 @@ import java.time.YearMonth
 
 class CalendarViewModel(
     private val getScheduleUseCase: GetScheduleForMonthUseCase,
-    private val setOverrideDayUseCase: SetOverrideDayUseCase
+    private val setOverrideDayUseCase: SetOverrideDayUseCase,
+    private val getShiftPatternsUseCase: GetShiftPatternsUseCase,
+    private val selectActivePatternUseCase: SelectActivePatternUseCase,
+    private val deleteShiftPatternUseCase: DeleteShiftPatternUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CalendarUiState())
@@ -29,7 +36,44 @@ class CalendarViewModel(
     private var scheduleJob: Job? = null
 
     init {
+        observePatterns()
         loadMonthData(_uiState.value.yearMonth)
+    }
+
+    private fun observePatterns() {
+        combine(
+            getShiftPatternsUseCase(),
+            getScheduleUseCase.repository.getActivePattern()
+        ) { allPatterns, activePattern ->
+            _uiState.update { 
+                it.copy(
+                    patterns = allPatterns,
+                    selectedPattern = activePattern
+                )
+            }
+        }.launchIn(viewModelScope)
+    }
+
+    fun selectPattern(patternId: Long) {
+        viewModelScope.launch {
+            selectActivePatternUseCase(patternId)
+        }
+    }
+
+    fun deletePattern(patternId: Long) {
+        viewModelScope.launch {
+            val currentState = _uiState.value
+            val isActive = currentState.selectedPattern?.id == patternId
+            
+            deleteShiftPatternUseCase(patternId)
+            
+            if (isActive) {
+                val remaining = currentState.patterns.filter { it.id != patternId }
+                if (remaining.isNotEmpty()) {
+                    selectActivePatternUseCase(remaining.first().id)
+                }
+            }
+        }
     }
 
     fun nextMonth() {
@@ -46,8 +90,10 @@ class CalendarViewModel(
         scheduleJob?.cancel()
         _uiState.update { it.copy(yearMonth = yearMonth, isLoading = true) }
 
-        val start = yearMonth.atDay(1)
-        val end = yearMonth.atEndOfMonth()
+        val firstDayOfMonth = yearMonth.atDay(1)
+        val dayOfWeekOffset = (firstDayOfMonth.dayOfWeek.value - 1) % 7
+        val start = firstDayOfMonth.minusDays(dayOfWeekOffset.toLong())
+        val end = start.plusDays(41) // Fetch 6 full weeks to cover any month grid
 
         scheduleJob = getScheduleUseCase(start, end)
             .onEach { days ->
@@ -58,7 +104,7 @@ class CalendarViewModel(
                         days = days,
                         availableTypes = availableTypes.distinctBy { t -> t.id },
                         isLoading = false,
-                        stats = calculateStats(days)
+                        stats = calculateStats(days, yearMonth)
                     )
                 }
             }
@@ -83,13 +129,13 @@ class CalendarViewModel(
         }
     }
 
-    private fun calculateStats(days: List<WorkDay>): MonthStats {
+    private fun calculateStats(days: List<WorkDay>, yearMonth: YearMonth): MonthStats {
         var workDays = 0
         var workHours = 0.0
         var dayShifts = 0
         var nightShifts = 0
 
-        days.forEach { day ->
+        days.filter { YearMonth.from(it.date) == yearMonth }.forEach { day ->
             val type = day.shiftType
             if (type is ShiftType.Work) {
                 workDays++
