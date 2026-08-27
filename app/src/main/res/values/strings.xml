@@ -8,4 +8,12 @@
     <string name="current_pattern_label">Ваш цикл:</string>
     <string name="save_button">Сохранить</string>
     <string name="empty_pattern_hint">Нажимайте на кнопки выше, чтобы собрать цикл</string>
+    <string name="calendar_title">Календарь смен</string>
+    <string name="stats_title">Статистика за месяц</string>
+    <string name="stats_work_days">Рабочих дней: %d</string>
+    <string name="stats_work_hours">Всего часов: %.1f</string>
+    <string name="stats_day_shifts">Дневных смен: %d</string>
+    <string name="stats_night_shifts">Ночных смен: %d</string>
+    <string name="override_dialog_title">Изменить смену</string>
+    <string name="override_clear">Сбросить</string>
 </resources>

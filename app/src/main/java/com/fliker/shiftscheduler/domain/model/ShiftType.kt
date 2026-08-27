@@ -10,11 +10,11 @@ import kotlinx.serialization.encoding.Encoder
 import java.time.LocalTime
 
 @Serializable
-sealed class ShiftType(
-    open val id: String,
-    open val name: String,
-    val isWorkDay: Boolean
-) {
+sealed class ShiftType {
+    abstract val id: String
+    abstract val name: String
+    abstract val isWorkDay: Boolean
+
     @Serializable
     data class Work(
         override val id: String,
@@ -24,16 +24,30 @@ sealed class ShiftType(
         @Serializable(with = LocalTimeSerializer::class)
         val endTime: LocalTime,
         val colorHex: String
-    ) : ShiftType(id, name, isWorkDay = true)
+    ) : ShiftType() {
+        override val isWorkDay: Boolean = true
+    }
 
     @Serializable
-    object Off : ShiftType(id = "off", name = "Выходной", isWorkDay = false)
+    object Off : ShiftType() {
+        override val id: String = "off"
+        override val name: String = "Выходной"
+        override val isWorkDay: Boolean = false
+    }
 
     @Serializable
-    object Vacation : ShiftType(id = "vacation", name = "Отпуск", isWorkDay = false)
+    object Vacation : ShiftType() {
+        override val id: String = "vacation"
+        override val name: String = "Отпуск"
+        override val isWorkDay: Boolean = false
+    }
 
     @Serializable
-    object SickLeave : ShiftType(id = "sick", name = "Больничный", isWorkDay = false)
+    object SickLeave : ShiftType() {
+        override val id: String = "sick"
+        override val name: String = "Больничный"
+        override val isWorkDay: Boolean = false
+    }
 }
 
 object LocalTimeSerializer : KSerializer<LocalTime> {
