@@ -5,9 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -25,35 +22,37 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fliker.shiftscheduler.R
+import com.fliker.shiftscheduler.data.local.UserPreferences
 import com.fliker.shiftscheduler.domain.model.ShiftType
 import com.fliker.shiftscheduler.domain.model.WorkDay
-import com.fliker.shiftscheduler.data.local.UserPreferences
 import kotlinx.coroutines.launch
-import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.time.temporal.WeekFields
 import java.util.Locale
+
+private const val INITIAL_PAGE = 500
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun CalendarScreen(
     state: CalendarUiState,
     preferences: UserPreferences?,
-    onNextMonth: () -> Unit,
-    onPreviousMonth: () -> Unit,
+    onMonthUpdate: (YearMonth) -> Unit,
     onOverrideClick: (LocalDate, ShiftType) -> Unit,
     onClearOverride: (LocalDate) -> Unit,
     onSettingsClick: () -> Unit,
@@ -67,13 +66,21 @@ fun CalendarScreen(
     var patternToDelete by remember { mutableStateOf<com.fliker.shiftscheduler.domain.model.ShiftPattern?>(null) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    
+    val initialYearMonth = remember { YearMonth.now() }
+    val pagerState = rememberPagerState(initialPage = INITIAL_PAGE, pageCount = { 1000 })
+
+    // PERFORMANCE: Sync month title with current page (instant feedback)
+    val displayedMonth by remember {
+        derivedStateOf {
+            initialYearMonth.plusMonths((pagerState.currentPage - INITIAL_PAGE).toLong())
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(
-                modifier = Modifier.fillMaxWidth(0.7f)
-            ) {
+            ModalDrawerSheet(modifier = Modifier.fillMaxWidth(0.7f)) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = stringResource(R.string.app_name),
@@ -96,11 +103,7 @@ fun CalendarScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = pattern.name,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1
-                                )
+                                Text(text = pattern.name, modifier = Modifier.weight(1f), maxLines = 1)
                                 if (state.patterns.size > 1) {
                                     IconButton(
                                         onClick = { patternToDelete = pattern },
@@ -176,22 +179,18 @@ fun CalendarScreen(
                 }
             }
         ) { innerPadding ->
-            val pagerState = rememberPagerState(initialPage = 500, pageCount = { 1000 })
-            val initialYearMonth = remember { YearMonth.now() }
-
-            LaunchedEffect(state.yearMonth) {
-                val targetPage = 500 + (state.yearMonth.year - initialYearMonth.year) * 12 + (state.yearMonth.monthValue - initialYearMonth.monthValue)
-                if (pagerState.currentPage != targetPage) {
-                    pagerState.animateScrollToPage(targetPage)
-                }
+            // PERFORMANCE: Load data only when swipe settles
+            LaunchedEffect(pagerState.settledPage) {
+                val offset = pagerState.settledPage - INITIAL_PAGE
+                onMonthUpdate(initialYearMonth.plusMonths(offset.toLong()))
             }
 
-            LaunchedEffect(pagerState.currentPage) {
-                val offset = pagerState.currentPage - 500
-                val targetMonth = initialYearMonth.plusMonths(offset.toLong())
-                if (targetMonth != state.yearMonth) {
-                    if (targetMonth.isAfter(state.yearMonth)) onNextMonth()
-                    else onPreviousMonth()
+            // External sync (e.g. arrow buttons)
+            LaunchedEffect(state.yearMonth) {
+                val offset = (state.yearMonth.year - initialYearMonth.year) * 12 + (state.yearMonth.monthValue - initialYearMonth.monthValue)
+                val targetPage = INITIAL_PAGE + offset
+                if (pagerState.currentPage != targetPage) {
+                    pagerState.animateScrollToPage(targetPage)
                 }
             }
 
@@ -201,35 +200,98 @@ fun CalendarScreen(
                     .padding(innerPadding)
                     .padding(horizontal = 16.dp)
             ) {
-                WeekDaysHeader(showWeekNumbers = preferences?.showWeekNumbers ?: false)
-
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.weight(1f, fill = false)
-                ) { page ->
-                    val offset = page - 500
-                    val pageMonth = initialYearMonth.plusMonths(offset.toLong())
-                    
-                    if (pageMonth == state.yearMonth) {
-                        CalendarGrid(
-                            yearMonth = state.yearMonth,
-                            days = state.days,
-                            showWeekNumbers = preferences?.showWeekNumbers ?: false,
-                            dimWeekends = preferences?.dimWeekends ?: false,
-                            onDayClick = { selectedDayForOverride = it }
-                        )
-                    } else {
-                        Box(Modifier.fillMaxWidth().aspectRatio(7f/6f)) 
+                CalendarMonthPicker(
+                    yearMonth = displayedMonth,
+                    onNextMonth = { 
+                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                    },
+                    onPreviousMonth = { 
+                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
                     }
-                }
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                CalendarMonthPicker(
-                    yearMonth = state.yearMonth,
-                    onNextMonth = onNextMonth,
-                    onPreviousMonth = onPreviousMonth
-                )
+                val showWeekNumbers = preferences?.showWeekNumbers ?: false
+                val dimWeekends = preferences?.dimWeekends ?: false
+                
+                val surfaceColor = MaterialTheme.colorScheme.surface
+                val onSurface = MaterialTheme.colorScheme.onSurface
+                val outlineVariant = MaterialTheme.colorScheme.outlineVariant
+                val primaryColor = MaterialTheme.colorScheme.primary
+
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    if (showWeekNumbers) {
+                        Column(
+                            modifier = Modifier
+                                .width(40.dp)
+                                .padding(top = 32.dp)
+                        ) {
+                            val currentMonthDays = state.monthData[displayedMonth]
+                            val weeks = remember(currentMonthDays) { currentMonthDays?.chunked(7) ?: emptyList() }
+                            
+                            repeat(6) { index ->
+                                val week = weeks.getOrNull(index)
+                                val weekNumber = remember(week) {
+                                    week?.firstOrNull()?.date?.get(WeekFields.of(Locale.getDefault()).weekOfYear()) ?: ""
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f)
+                                        .background(surfaceColor.copy(alpha = 0.5f))
+                                        .border(0.5.dp, outlineVariant.copy(alpha = 0.5f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (weekNumber != "") {
+                                        Text(
+                                            text = weekNumber.toString(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            val daysOfWeek = remember { listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс") }
+                            daysOfWeek.forEach { day ->
+                                Text(
+                                    text = day,
+                                    modifier = Modifier.weight(1f),
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = primaryColor
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxWidth().aspectRatio(7f/6f),
+                            beyondBoundsPageCount = 1
+                        ) { page ->
+                            val pageMonth = remember(page) { initialYearMonth.plusMonths((page - INITIAL_PAGE).toLong()) }
+                            val days = state.monthData[pageMonth]
+                            
+                            StaticCalendarGrid(
+                                days = days,
+                                pageMonth = pageMonth,
+                                dimWeekends = dimWeekends,
+                                onDayClick = { selectedDayForOverride = it },
+                                surfaceColor = surfaceColor,
+                                onSurface = onSurface,
+                                outlineVariant = outlineVariant
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -258,9 +320,7 @@ fun CalendarScreen(
         AlertDialog(
             onDismissRequest = { patternToDelete = null },
             title = { Text(stringResource(R.string.delete_pattern_dialog_title)) },
-            text = { 
-                Text(stringResource(R.string.delete_pattern_dialog_message, patternToDelete!!.name)) 
-            },
+            text = { Text(stringResource(R.string.delete_pattern_dialog_message, patternToDelete!!.name)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -282,6 +342,130 @@ fun CalendarScreen(
 }
 
 @Composable
+fun StaticCalendarGrid(
+    days: List<WorkDay>?,
+    pageMonth: YearMonth,
+    dimWeekends: Boolean,
+    onDayClick: (LocalDate) -> Unit,
+    surfaceColor: Color,
+    onSurface: Color,
+    outlineVariant: Color
+) {
+    val weeks = remember(days) { days?.chunked(7) ?: emptyList() }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, outlineVariant)
+    ) {
+        repeat(6) { weekIndex ->
+            Row(modifier = Modifier.fillMaxWidth()) {
+                val week = weeks.getOrNull(weekIndex)
+                repeat(7) { dayIndex ->
+                    val day = week?.getOrNull(dayIndex)
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (day != null) {
+                            DayCell(
+                                day = day,
+                                isCurrentMonth = YearMonth.from(day.date) == pageMonth,
+                                dimWeekends = dimWeekends,
+                                onClick = onDayClick,
+                                surfaceColor = surfaceColor,
+                                onSurface = onSurface,
+                                outlineVariant = outlineVariant
+                            )
+                        } else {
+                            // Ghost cell to maintain grid while loading
+                            Box(
+                                modifier = Modifier
+                                    .aspectRatio(1f)
+                                    .background(surfaceColor)
+                                    .border(0.5.dp, outlineVariant.copy(alpha = 0.3f))
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DayCell(
+    day: WorkDay,
+    isCurrentMonth: Boolean,
+    dimWeekends: Boolean,
+    onClick: (LocalDate) -> Unit,
+    surfaceColor: Color,
+    onSurface: Color,
+    outlineVariant: Color
+) {
+    val shiftType = day.shiftType
+    val isToday = remember(day.date) { day.date == LocalDate.now() }
+    val dayText = remember(day.date) { day.date.dayOfMonth.toString() }
+    
+    val backgroundColor = remember(shiftType, surfaceColor) {
+        when (shiftType) {
+            is ShiftType.Work -> Color(shiftType.colorInt)
+            is ShiftType.Off -> surfaceColor
+            is ShiftType.Vacation -> Color(0xFF4CAF50)
+            is ShiftType.SickLeave -> Color(0xFFF44336)
+        }
+    }
+
+    val isWeekend = remember(day.date) { day.date.dayOfWeek.value >= 6 }
+    val alpha = remember(isCurrentMonth, dimWeekends, isWeekend, shiftType) {
+        if (!isCurrentMonth) 0.4f 
+        else if (dimWeekends && isWeekend && shiftType is ShiftType.Off) 0.6f 
+        else 1f
+    }
+
+    val textColor = remember(shiftType, isToday, onSurface) {
+        if (shiftType is ShiftType.Work || shiftType is ShiftType.Vacation || shiftType is ShiftType.SickLeave) 
+            Color.White 
+        else 
+            onSurface
+    }
+
+    // PERFORMANCE: Use drawBehind for background and borders to flatten hierarchy
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .graphicsLayer { this.alpha = alpha }
+            .drawBehind {
+                drawRect(color = backgroundColor)
+                
+                // Borders
+                if (isToday) {
+                    drawRect(
+                        color = Color.White,
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                } else if (day.isCustomOverride) {
+                    drawRect(
+                        color = Color.White.copy(alpha = 0.5f),
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+                } else {
+                    drawRect(
+                        color = outlineVariant.copy(alpha = 0.5f),
+                        style = Stroke(width = 0.5.dp.toPx())
+                    )
+                }
+            }
+            .clickable(onClick = { onClick(day.date) }),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = dayText,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
+            color = textColor
+        )
+    }
+}
+
+@Composable
 fun CalendarMonthPicker(
     yearMonth: YearMonth,
     onNextMonth: () -> Unit,
@@ -295,7 +479,6 @@ fun CalendarMonthPicker(
         IconButton(onClick = onPreviousMonth) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous Month")
         }
-
         Text(
             text = yearMonth.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale("ru"))
                 .replaceFirstChar { it.uppercase() } + " " + yearMonth.year,
@@ -303,127 +486,8 @@ fun CalendarMonthPicker(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
-
         IconButton(onClick = onNextMonth) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next Month")
-        }
-    }
-}
-
-@Composable
-fun WeekDaysHeader(showWeekNumbers: Boolean) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        if (showWeekNumbers) {
-            Spacer(modifier = Modifier.width(32.dp))
-        }
-        val daysOfWeek = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
-        daysOfWeek.forEach { day ->
-            Text(
-                text = day,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
-
-@Composable
-fun CalendarGrid(
-    yearMonth: YearMonth,
-    days: List<WorkDay>,
-    showWeekNumbers: Boolean,
-    dimWeekends: Boolean,
-    onDayClick: (LocalDate) -> Unit
-) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        if (showWeekNumbers) {
-            Column(
-                modifier = Modifier.width(32.dp).padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val weeks = days.chunked(7)
-                weeks.forEach { week ->
-                    val weekNumber = week.firstOrNull()?.date?.get(WeekFields.of(Locale.getDefault()).weekOfYear()) ?: ""
-                    Box(modifier = Modifier.aspectRatio(1f), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = weekNumber.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-            }
-        }
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(7),
-            modifier = Modifier
-                .weight(1f)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            horizontalArrangement = Arrangement.spacedBy(0.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
-        ) {
-            items(days) { day ->
-                DayCell(
-                    day = day,
-                    isCurrentMonth = YearMonth.from(day.date) == yearMonth,
-                    dimWeekends = dimWeekends,
-                    onClick = { onDayClick(day.date) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun DayCell(
-    day: WorkDay,
-    isCurrentMonth: Boolean,
-    dimWeekends: Boolean,
-    onClick: () -> Unit
-) {
-    val shiftType = day.shiftType
-    val backgroundColor = when (shiftType) {
-        is ShiftType.Work -> Color(android.graphics.Color.parseColor(shiftType.colorHex))
-        is ShiftType.Off -> MaterialTheme.colorScheme.surface
-        is ShiftType.Vacation -> Color(0xFF4CAF50)
-        is ShiftType.SickLeave -> Color(0xFFF44336)
-    }
-
-    val isWeekend = day.date.dayOfWeek.value >= 6
-    val isToday = day.date == LocalDate.now()
-    
-    val alpha = if (!isCurrentMonth) 0.4f 
-                else if (dimWeekends && isWeekend && shiftType is ShiftType.Off) 0.6f 
-                else 1f
-
-    Surface(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .clickable(onClick = onClick)
-            .alpha(alpha),
-        shape = RectangleShape,
-        color = backgroundColor,
-        border = if (isToday) BorderStroke(2.dp, Color.White) 
-                 else if (day.isCustomOverride) BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
-                 else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = day.date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
-                color = if (shiftType is ShiftType.Work || shiftType is ShiftType.Vacation || shiftType is ShiftType.SickLeave) 
-                            Color.White 
-                        else 
-                            MaterialTheme.colorScheme.onSurface
-            )
         }
     }
 }
@@ -470,11 +534,14 @@ fun OverrideDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 availableTypes.forEach { type ->
+                    val color = remember(type) { 
+                        if (type is ShiftType.Work) Color(type.colorInt) else Color.Transparent 
+                    }
                     Button(
                         onClick = { onSelectType(type) },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (type is ShiftType.Work) Color(android.graphics.Color.parseColor(type.colorHex)) else MaterialTheme.colorScheme.surfaceVariant,
+                            containerColor = if (type is ShiftType.Work) color else MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = if (type is ShiftType.Work) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     ) {

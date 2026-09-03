@@ -64,8 +64,7 @@ fun AppNavigation(
                 CalendarScreen(
                     state = state,
                     preferences = uiPrefs,
-                    onNextMonth = { viewModel.nextMonth() },
-                    onPreviousMonth = { viewModel.previousMonth() },
+                    onMonthUpdate = { viewModel.updateCurrentMonth(it) },
                     onOverrideClick = { date, type -> viewModel.applyOverride(date, type) },
                     onClearOverride = { date -> viewModel.clearOverride(date) },
                     onSettingsClick = { navController.navigate("settings_pattern") },

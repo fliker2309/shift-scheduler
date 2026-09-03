@@ -3,8 +3,7 @@ package com.fliker.shiftscheduler.ui.calendar
 import com.fliker.shiftscheduler.domain.model.ShiftPattern
 import com.fliker.shiftscheduler.domain.model.WorkDay
 import com.fliker.shiftscheduler.domain.repository.ShiftRepository
-import com.fliker.shiftscheduler.domain.usecase.GetScheduleForMonthUseCase
-import com.fliker.shiftscheduler.domain.usecase.SetOverrideDayUseCase
+import com.fliker.shiftscheduler.domain.usecase.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -17,7 +16,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
-import java.time.YearMonth
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CalendarViewModelTest {
@@ -26,7 +24,10 @@ class CalendarViewModelTest {
 
     private class FakeShiftRepository : ShiftRepository {
         override fun getActivePattern(): Flow<ShiftPattern?> = flowOf(null)
+        override fun getAllPatterns(): Flow<List<ShiftPattern>> = flowOf(emptyList())
         override suspend fun savePattern(pattern: ShiftPattern) {}
+        override suspend fun setActivePattern(patternId: Long) {}
+        override suspend fun deletePattern(patternId: Long) {}
         override fun getCustomOverrides(from: LocalDate, to: LocalDate): Flow<List<WorkDay>> = flowOf(emptyList())
         override suspend fun saveCustomOverride(workDay: WorkDay) {}
         override suspend fun deleteCustomOverride(date: LocalDate) {}
@@ -40,7 +41,10 @@ class CalendarViewModelTest {
         val repository = FakeShiftRepository()
         viewModel = CalendarViewModel(
             GetScheduleForMonthUseCase(repository),
-            SetOverrideDayUseCase(repository)
+            SetOverrideDayUseCase(repository),
+            GetShiftPatternsUseCase(repository),
+            SelectActivePatternUseCase(repository),
+            DeleteShiftPatternUseCase(repository)
         )
     }
 

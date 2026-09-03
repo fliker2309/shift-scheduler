@@ -22,7 +22,10 @@ class GetScheduleForMonthUseCaseTest {
         var overrides: List<WorkDay> = emptyList()
     ) : ShiftRepository {
         override fun getActivePattern(): Flow<ShiftPattern?> = flowOf(pattern)
+        override fun getAllPatterns(): Flow<List<ShiftPattern>> = flowOf(pattern?.let { listOf(it) } ?: emptyList())
         override suspend fun savePattern(pattern: ShiftPattern) { this.pattern = pattern }
+        override suspend fun setActivePattern(patternId: Long) {}
+        override suspend fun deletePattern(patternId: Long) {}
         override fun getCustomOverrides(from: LocalDate, to: LocalDate): Flow<List<WorkDay>> = flowOf(overrides)
         override suspend fun saveCustomOverride(workDay: WorkDay) {}
         override suspend fun deleteCustomOverride(date: LocalDate) {}

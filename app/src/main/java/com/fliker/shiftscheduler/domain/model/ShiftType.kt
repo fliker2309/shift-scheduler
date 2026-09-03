@@ -1,5 +1,6 @@
 package com.fliker.shiftscheduler.domain.model
 
+import androidx.compose.runtime.Stable
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -9,6 +10,7 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import java.time.LocalTime
 
+@Stable
 @Serializable
 sealed class ShiftType {
     abstract val id: String
@@ -26,6 +28,7 @@ sealed class ShiftType {
         val colorHex: String
     ) : ShiftType() {
         override val isWorkDay: Boolean = true
+        val colorInt: Int by lazy { android.graphics.Color.parseColor(colorHex) }
     }
 
     @Serializable
